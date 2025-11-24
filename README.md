@@ -173,13 +173,20 @@ Tests include:
 
 ### Usage
 
-1. Open `http://localhost:8080` in your browser
+1. Open `http://localhost:8080` in your browser (desktop or mobile)
 2. Choose an option:
    - **CREATE GAME**: Create a new room
    - **JOIN GAME**: Join an existing room
    - **CREATE OR JOIN**: Automatically join or create
 3. Once in game:
-   - Click anywhere on the ground to move your player
+   - **Desktop Controls**:
+     - Click anywhere on the ground to move your player
+     - Use **WASD** or **Arrow Keys** for continuous movement
+     - Mouse drag to rotate camera, scroll to zoom
+   - **Mobile Controls**:
+     - Tap anywhere on the ground to move your player
+     - Use the **virtual joystick** (bottom-left) for continuous movement
+     - Touch drag to rotate camera, pinch to zoom
    - See other players as gray spheres (you're orange)
    - Video/audio streams appear above players (if media permitted)
 4. **For AR Mode** (mobile devices with AR support):
@@ -219,6 +226,51 @@ EE2/
 └── README.md              # This file
 ```
 
+## Mobile and Desktop Support
+
+BXR provides full cross-platform support with optimized controls for both mobile and desktop devices.
+
+### Device Detection
+
+The application automatically detects the device type and adapts the interface and controls accordingly:
+- **Mobile**: Virtual joystick, touch-optimized camera, responsive UI
+- **Desktop**: Keyboard controls (WASD/Arrows), mouse controls, full-size UI
+
+### Control Schemes
+
+#### Desktop Controls
+- **Movement**:
+  - **Mouse Click**: Click on ground to move to that location
+  - **WASD Keys**: Continuous movement relative to camera
+  - **Arrow Keys**: Alternative continuous movement controls
+- **Camera**:
+  - **Mouse Drag**: Rotate camera around scene
+  - **Mouse Wheel**: Zoom in/out
+
+#### Mobile Controls
+- **Movement**:
+  - **Tap Ground**: Tap on ground to move to that location
+  - **Virtual Joystick**: Bottom-left circular joystick for continuous movement
+- **Camera**:
+  - **Touch Drag**: Rotate camera around scene
+  - **Pinch**: Zoom in/out
+
+### Responsive Features
+
+- **Viewport Configuration**: Optimized meta tags for mobile browsers
+- **Touch Handling**: Prevents scroll interference and overscroll behavior
+- **UI Scaling**: Buttons, text, and controls scale based on screen size
+- **Camera Settings**: Adjusted sensitivity and limits for touch vs. mouse input
+- **WebRTC Compatibility**: Video/audio streaming works across all devices
+
+### Cross-Device Multiplayer
+
+The multiplayer system seamlessly supports mixed-device sessions:
+- Desktop and mobile players can join the same game room
+- WebRTC peer-to-peer connections work across all device types
+- Position synchronization is optimized for different input methods
+- Video/audio streams display correctly regardless of device
+
 ## Technology Stack
 
 | Component | Technology | Purpose |
@@ -256,15 +308,27 @@ EE2/
 - Grant camera/microphone permissions when prompted
 - Check browser console for WebRTC errors
 - Ensure HTTPS for production (HTTP works for localhost)
+- On mobile: Tap the screen to enable autoplay if blocked
 
 **AR Mode Not Available**:
 - AR requires WebXR-compatible device (recent Android/iOS)
 - Desktop browsers will automatically use fallback camera
 
+**Mobile Controls Not Responding**:
+- Ensure touch-action is properly disabled (check CSS)
+- Try refreshing the page if joystick becomes unresponsive
+- Check that browser supports touch events
+
+**Keyboard Controls Not Working (Desktop)**:
+- Click on the game canvas to ensure it has focus
+- Check browser console for any JavaScript errors
+- Ensure you're not in AR mode (keyboard is desktop-only)
+
 **Connection Issues**:
 - Verify server is running on port 2567
 - Check firewall settings
 - Ensure client endpoint matches server address
+- For mobile: Check that device is on same network as server
 
 ## License
 

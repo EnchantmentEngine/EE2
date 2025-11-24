@@ -6,6 +6,9 @@ import Menu from "./menu";
 import { createSkyBox } from "./utils";
 
 const GROUND_SIZE = 500;
+const BOUNDARY_LIMIT = 245; // Position boundary limit
+const KEYBOARD_SPEED = 5; // Movement speed for keyboard controls
+const JOYSTICK_SPEED = 3; // Movement speed for joystick controls
 
 // WebRTC Configuration
 const RTC_CONFIG = {
@@ -28,10 +31,26 @@ export default class Game {
     private peers: { [sessionId: string]: RTCPeerConnection } = {};
     private videoMeshes: { [sessionId: string]: BABYLON.Mesh } = {};
 
+    // Mobile/Desktop Controls
+    private isMobile: boolean = false;
+    private virtualJoystick: GUI.Ellipse | null = null;
+    private joystickContainer: GUI.Ellipse | null = null;
+    private joystickActive: boolean = false;
+    private joystickOffset: BABYLON.Vector2 = BABYLON.Vector2.Zero();
+    private keyboardMovement: BABYLON.Vector3 = BABYLON.Vector3.Zero();
+
     constructor(canvas: HTMLCanvasElement, engine: BABYLON.Engine, room: Room<any>) {
         this.canvas = canvas;
         this.engine = engine;
         this.room = room;
+        
+        // Detect mobile device
+        this.isMobile = this.detectMobileDevice();
+    }
+
+    private detectMobileDevice(): boolean {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || (window.innerWidth <= 768);
     }
 
     initPlayers(): void {
@@ -107,10 +126,10 @@ export default class Game {
         const advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("textUI");
 
         const playerInfo = new GUI.TextBlock("playerInfo");
-        playerInfo.text = `Room name: ${this.room.name}      Player: ${this.room.sessionId}`.toUpperCase();
+        playerInfo.text = `Room: ${this.room.name}      Player: ${this.room.sessionId}`.toUpperCase();
         playerInfo.color = "#eaeaea";
         playerInfo.fontFamily = "Roboto";
-        playerInfo.fontSize = 20;
+        playerInfo.fontSize = this.isMobile ? 14 : 20;
         playerInfo.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
         playerInfo.textVerticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
         playerInfo.paddingTop = "10px";
@@ -119,10 +138,14 @@ export default class Game {
         advancedTexture.addControl(playerInfo);
 
         const instructions = new GUI.TextBlock("instructions");
-        instructions.text = "CLICK ANYWHERE ON THE GROUND!";
+        if (this.isMobile) {
+            instructions.text = "USE JOYSTICK TO MOVE OR TAP GROUND!";
+        } else {
+            instructions.text = "CLICK GROUND TO MOVE OR USE WASD KEYS!";
+        }
         instructions.color = "#fff000"
         instructions.fontFamily = "Roboto";
-        instructions.fontSize = 24;
+        instructions.fontSize = this.isMobile ? 16 : 24;
         instructions.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
         instructions.textVerticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
         instructions.paddingBottom = "10px";
@@ -130,9 +153,10 @@ export default class Game {
 
         // back to menu button
         const button = GUI.Button.CreateImageWithCenterTextButton("back", "<- BACK", "./public/btn-default.png");
-        button.width = "100px";
-        button.height = "50px";
+        button.width = this.isMobile ? "80px" : "100px";
+        button.height = this.isMobile ? "40px" : "50px";
         button.fontFamily = "Roboto";
+        button.fontSize = this.isMobile ? "12px" : "16px";
         button.thickness = 0;
         button.color = "#f8f8f8";
         button.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
@@ -147,6 +171,79 @@ export default class Game {
             await this.room.leave(true);
         });
         advancedTexture.addControl(button);
+
+        // Add virtual joystick for mobile
+        if (this.isMobile) {
+            this.createVirtualJoystick(advancedTexture);
+        }
+    }
+
+    private createVirtualJoystick(advancedTexture: GUI.AdvancedDynamicTexture): void {
+        // Joystick container (outer circle)
+        this.joystickContainer = new GUI.Ellipse("joystickContainer");
+        this.joystickContainer.width = "120px";
+        this.joystickContainer.height = "120px";
+        this.joystickContainer.color = "white";
+        this.joystickContainer.thickness = 4;
+        this.joystickContainer.background = "rgba(0, 0, 0, 0.3)";
+        this.joystickContainer.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        this.joystickContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
+        this.joystickContainer.left = 60;
+        this.joystickContainer.top = -60;
+        advancedTexture.addControl(this.joystickContainer);
+
+        // Joystick thumb (inner circle)
+        this.virtualJoystick = new GUI.Ellipse("joystickThumb");
+        this.virtualJoystick.width = "60px";
+        this.virtualJoystick.height = "60px";
+        this.virtualJoystick.color = "white";
+        this.virtualJoystick.thickness = 3;
+        this.virtualJoystick.background = "rgba(255, 255, 255, 0.6)";
+        this.joystickContainer.addControl(this.virtualJoystick);
+
+        // Joystick touch handling
+        this.joystickContainer.onPointerDownObservable.add((coords) => {
+            this.joystickActive = true;
+        });
+
+        this.joystickContainer.onPointerUpObservable.add(() => {
+            this.joystickActive = false;
+            this.joystickOffset = BABYLON.Vector2.Zero();
+            if (this.virtualJoystick) {
+                this.virtualJoystick.left = 0;
+                this.virtualJoystick.top = 0;
+            }
+        });
+
+        this.joystickContainer.onPointerMoveObservable.add((coords) => {
+            if (this.joystickActive && this.virtualJoystick && this.joystickContainer) {
+                // Get container size
+                const containerSize = 120;
+                const maxDistance = 30; // Half of thumb movement range
+
+                // Calculate offset from center
+                const centerX = parseInt(this.joystickContainer.leftInPixels.toString()) + containerSize / 2;
+                const centerY = parseInt(this.joystickContainer.topInPixels.toString()) + containerSize / 2;
+                
+                let deltaX = coords.x - centerX;
+                let deltaY = coords.y - centerY;
+
+                // Limit thumb movement
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                if (distance > maxDistance) {
+                    deltaX = (deltaX / distance) * maxDistance;
+                    deltaY = (deltaY / distance) * maxDistance;
+                }
+
+                // Update thumb position
+                this.virtualJoystick.left = deltaX;
+                this.virtualJoystick.top = deltaY;
+
+                // Store normalized offset for movement
+                this.joystickOffset.x = deltaX / maxDistance;
+                this.joystickOffset.y = deltaY / maxDistance;
+            }
+        });
     }
 
     async bootstrap(): Promise<void> {
@@ -172,32 +269,92 @@ export default class Game {
         this.initSignalHandler();
 
         // 5. Input Logic
+        this.initInputHandlers();
+
+        this.doRender();
+    }
+
+    private initInputHandlers(): void {
+        // Mouse/Touch click to move
         this.scene.onPointerDown = (event, pointer) => {
+            // Only handle left mouse button or touch
             if (event.button == 0) {
+                // Ignore clicks on joystick
+                if (this.joystickActive) return;
+                
                 const pickInfo = this.scene.pick(this.scene.pointerX, this.scene.pointerY);
-                if (pickInfo.hit) {
+                if (pickInfo.hit && pickInfo.pickedMesh?.name === "plane") {
                     const targetPosition = pickInfo.pickedPoint.clone();
-
-                    // Position adjustments for the current play ground.
-                    targetPosition.y = -1;
-                    if (targetPosition.x > 245) targetPosition.x = 245;
-                    else if (targetPosition.x < -245) targetPosition.x = -245;
-                    if (targetPosition.z > 245) targetPosition.z = 245;
-                    else if (targetPosition.z < -245) targetPosition.z = -245;
-
-                    this.playerNextPosition[this.room.sessionId] = targetPosition;
-
-                    // Send position update to the server
-                    this.room.send("updatePosition", {
-                        x: targetPosition.x,
-                        y: targetPosition.y,
-                        z: targetPosition.z,
-                    });
+                    this.updatePlayerPosition(targetPosition);
                 }
             }
         };
 
-        this.doRender();
+        // Desktop keyboard controls (WASD)
+        if (!this.isMobile) {
+            this.initKeyboardControls();
+        }
+    }
+
+    private initKeyboardControls(): void {
+        const inputMap: { [key: string]: boolean } = {};
+        
+        this.scene.actionManager = new BABYLON.ActionManager(this.scene);
+
+        // Key down events
+        this.scene.actionManager.registerAction(
+            new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyDownTrigger, (evt) => {
+                inputMap[evt.sourceEvent.key.toLowerCase()] = true;
+            })
+        );
+
+        // Key up events
+        this.scene.actionManager.registerAction(
+            new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyUpTrigger, (evt) => {
+                inputMap[evt.sourceEvent.key.toLowerCase()] = false;
+            })
+        );
+
+        // Movement processing in render loop
+        this.scene.onBeforeRenderObservable.add(() => {
+            let hasMovement = false;
+
+            // Calculate movement direction
+            let forward = 0;
+            let right = 0;
+
+            if (inputMap["w"] || inputMap["arrowup"]) {
+                forward = 1;
+                hasMovement = true;
+            }
+            if (inputMap["s"] || inputMap["arrowdown"]) {
+                forward = -1;
+                hasMovement = true;
+            }
+            if (inputMap["a"] || inputMap["arrowleft"]) {
+                right = -1;
+                hasMovement = true;
+            }
+            if (inputMap["d"] || inputMap["arrowright"]) {
+                right = 1;
+                hasMovement = true;
+            }
+
+            if (hasMovement) {
+                const playerMesh = this.playerEntities[this.room.sessionId];
+                if (playerMesh) {
+                    // Get camera direction for movement relative to camera
+                    const { forward: cameraDirection, right: cameraRight } = this.getCameraDirectionVectors();
+
+                    // Calculate new position
+                    const movement = cameraDirection.scale(forward * KEYBOARD_SPEED)
+                        .add(cameraRight.scale(right * KEYBOARD_SPEED));
+                    
+                    const newPosition = playerMesh.position.add(movement);
+                    this.updatePlayerPosition(newPosition);
+                }
+            }
+        });
     }
 
     async initXR(): Promise<void> {
@@ -213,6 +370,11 @@ export default class Game {
                     optionalFeatures: true
                 });
                 console.log("WebXR AR initialized successfully");
+                
+                // Store reference to XR camera if needed
+                if (xr.baseExperience.camera) {
+                    this.camera = xr.baseExperience.camera;
+                }
                 return; // Exit early if WebXR initialized successfully
             } catch (error) {
                 console.error("WebXR AR initialization failed:", error);
@@ -222,10 +384,26 @@ export default class Game {
         }
 
         // Fallback to standard camera if WebXR is not supported or failed
-        console.log("Using desktop camera fallback");
+        console.log("Using desktop/mobile camera fallback");
         const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, 1.0, 550, BABYLON.Vector3.Zero(), this.scene);
         camera.setTarget(BABYLON.Vector3.Zero());
         camera.attachControl(this.canvas, true);
+        
+        // Optimize camera for mobile devices
+        if (this.isMobile) {
+            camera.lowerRadiusLimit = 300;
+            camera.upperRadiusLimit = 800;
+            camera.panningSensibility = 50; // Less sensitive panning for touch
+            camera.pinchPrecision = 100; // Pinch to zoom sensitivity
+            camera.wheelPrecision = 50; // Scroll zoom sensitivity
+            // Adjust touch sensitivity using available properties
+            camera.angularSensibilityX = 5000;
+            camera.angularSensibilityY = 5000;
+        } else {
+            camera.lowerRadiusLimit = 200;
+            camera.upperRadiusLimit = 1000;
+        }
+        
         this.camera = camera;
         createSkyBox(this.scene); // Only add skybox in non-AR
     }
@@ -357,6 +535,49 @@ export default class Game {
         this.videoMeshes[sessionId] = plane;
     }
 
+    private getCameraDirectionVectors(): { forward: BABYLON.Vector3, right: BABYLON.Vector3 } {
+        let cameraDirection = BABYLON.Vector3.Zero();
+        let cameraRight = BABYLON.Vector3.Zero();
+        
+        if (this.camera && this.camera instanceof BABYLON.ArcRotateCamera) {
+            const arcCamera = this.camera as BABYLON.ArcRotateCamera;
+            cameraDirection = arcCamera.target.subtract(arcCamera.position).normalize();
+            cameraDirection.y = 0; // Keep movement horizontal
+            cameraDirection.normalize();
+            cameraRight = BABYLON.Vector3.Cross(cameraDirection, BABYLON.Vector3.Up());
+        } else {
+            // Default to world axes if camera is not available
+            cameraDirection = new BABYLON.Vector3(0, 0, 1);
+            cameraRight = new BABYLON.Vector3(1, 0, 0);
+        }
+        
+        return { forward: cameraDirection, right: cameraRight };
+    }
+
+    private clampToBoundaries(position: BABYLON.Vector3): BABYLON.Vector3 {
+        const clampedPosition = position.clone();
+        clampedPosition.y = -1;
+        
+        if (clampedPosition.x > BOUNDARY_LIMIT) clampedPosition.x = BOUNDARY_LIMIT;
+        else if (clampedPosition.x < -BOUNDARY_LIMIT) clampedPosition.x = -BOUNDARY_LIMIT;
+        if (clampedPosition.z > BOUNDARY_LIMIT) clampedPosition.z = BOUNDARY_LIMIT;
+        else if (clampedPosition.z < -BOUNDARY_LIMIT) clampedPosition.z = -BOUNDARY_LIMIT;
+        
+        return clampedPosition;
+    }
+
+    private updatePlayerPosition(newPosition: BABYLON.Vector3): void {
+        const clampedPosition = this.clampToBoundaries(newPosition);
+        this.playerNextPosition[this.room.sessionId] = clampedPosition;
+
+        // Send position update to server
+        this.room.send("updatePosition", {
+            x: clampedPosition.x,
+            y: clampedPosition.y,
+            z: clampedPosition.z,
+        });
+    }
+
     private gotoMenu() {
         this.scene.dispose();
         const menu = new Menu('renderCanvas');
@@ -370,6 +591,22 @@ export default class Game {
               const entity = this.playerEntities[sessionId];
               const targetPosition = this.playerNextPosition[sessionId];
               entity.position = BABYLON.Vector3.Lerp(entity.position, targetPosition, 0.05);
+            }
+
+            // Process joystick input for mobile
+            if (this.isMobile && this.joystickActive && this.joystickOffset.length() > 0.1) {
+                const playerMesh = this.playerEntities[this.room.sessionId];
+                if (playerMesh) {
+                    // Get camera direction for movement relative to camera
+                    const { forward: cameraDirection, right: cameraRight } = this.getCameraDirectionVectors();
+
+                    // Calculate movement from joystick
+                    const movement = cameraDirection.scale(-this.joystickOffset.y * JOYSTICK_SPEED)
+                        .add(cameraRight.scale(this.joystickOffset.x * JOYSTICK_SPEED));
+                    
+                    const newPosition = playerMesh.position.add(movement);
+                    this.updatePlayerPosition(newPosition);
+                }
             }
         });
 

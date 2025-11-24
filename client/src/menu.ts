@@ -19,11 +19,17 @@ export default class Menu {
     private _colyseus: Client = new Client(ENDPOINT);
 
     private _errorMessage: GUI.TextBlock = new GUI.TextBlock("errorText");
+    
+    private _isMobile: boolean = false;
 
     constructor(canvasElement: string) {
         // Create canvas and engine.
         this._canvas = document.getElementById(canvasElement) as HTMLCanvasElement;
         this._engine = new BABYLON.Engine(this._canvas, true);
+        
+        // Detect mobile device
+        this._isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || (window.innerWidth <= 768);
     }
 
     createMenu(): void {
@@ -31,6 +37,14 @@ export default class Menu {
         this._camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, 1.0, 110, BABYLON.Vector3.Zero(), this._scene);
         this._camera.useAutoRotationBehavior = true;
         this._camera.setTarget(BABYLON.Vector3.Zero());
+        this._camera.attachControl(this._canvas, true);
+        
+        // Optimize camera for mobile
+        if (this._isMobile) {
+            this._camera.panningSensibility = 1000;
+            this._camera.pinchPrecision = 200;
+        }
+        
         this._advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
         createSkyBox(this._scene);
@@ -40,13 +54,13 @@ export default class Menu {
         controlBox.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
         controlBox.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
         controlBox.height = "100%";
-        controlBox.width = "40%";
+        controlBox.width = this._isMobile ? "80%" : "40%";
         controlBox.thickness = 0;
 
         const logo = new GUI.Image("ColyseusLogo", "./public/colyseus.png");
         logo.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
         logo.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-        logo.height = "40%";
+        logo.height = this._isMobile ? "25%" : "40%";
         logo.paddingTop = "10px";
         logo.stretch = GUI.Image.STRETCH_UNIFORM;
         controlBox.addControl(logo);
@@ -93,12 +107,12 @@ export default class Menu {
 
     private createMenuButton(name: string, text: string): GUI.Button {
         const button = GUI.Button.CreateImageWithCenterTextButton(name, text, "./public/btn-default.png");
-        button.width = "45%";
-        button.height = "55px";
+        button.width = this._isMobile ? "70%" : "45%";
+        button.height = this._isMobile ? "50px" : "55px";
         button.fontFamily = "Roboto";
-        button.fontSize = "6%";
+        button.fontSize = this._isMobile ? "5%" : "6%";
         button.thickness = 0;
-        button.paddingTop = "10px"
+        button.paddingTop = "10px";
         button.color = "#c0c0c0";
         return button;
     }
