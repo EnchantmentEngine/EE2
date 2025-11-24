@@ -1,8 +1,8 @@
-# EE2
+# BXR
 
 ## Overview
 
-EE2 is a real-time multiplayer 3D application with WebXR (Augmented Reality) support. It combines BabylonJS for 3D rendering, Colyseus for multiplayer state management, and WebRTC for peer-to-peer video/audio communication.
+BXR is a real-time multiplayer 3D application with WebXR (Augmented Reality) support. It combines BabylonJS for 3D rendering, Colyseus for multiplayer state management, and WebRTC for peer-to-peer video/audio communication.
 
 ## System Architecture
 
