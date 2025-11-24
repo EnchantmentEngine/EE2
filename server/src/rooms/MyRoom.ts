@@ -2,7 +2,7 @@ import { Room, Client } from "@colyseus/core";
 import { MyRoomState, Player } from "./schema/MyRoomState";
 
 export class MyRoom extends Room<MyRoomState> {
-    maxClients = 5;
+    maxClients = 10;
 
     onCreate(options: any) {
         console.log("MyRoom created.");
@@ -15,6 +15,27 @@ export class MyRoom extends Room<MyRoomState> {
             player.x = data["x"];
             player.y = data['y'];
             player.z = data["z"];
+        });
+
+        // WebRTC Signaling
+        this.onMessage("signal", (client, data: any) => {
+            // Validate input data
+            if (!data || typeof data.to !== 'string' || typeof data.type !== 'string' || !data.payload) {
+                console.error("Invalid signal data received from", client.sessionId);
+                return;
+            }
+            
+            // data = { to: "targetSessionId", type: "offer"|"answer"|"candidate", payload: ... }
+            // Iterate through clients and find the target
+            this.clients.forEach((targetClient: Client) => {
+                if (targetClient.sessionId === data.to) {
+                    targetClient.send("signal", {
+                        from: client.sessionId,
+                        type: data.type,
+                        payload: data.payload
+                    });
+                }
+            });
         });
     }
 
